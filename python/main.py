@@ -22,7 +22,7 @@ def get_db():
     if not db.exists():
         yield
 
-    conn = sqlite3.connect(db)
+    conn = sqlite3.connect(db,check_same_thread=False)
     conn.row_factory = sqlite3.Row  # Return rows as dictionaries
     try:
         yield conn
@@ -32,7 +32,42 @@ def get_db():
 
 # STEP 5-1: set up the database connection
 def setup_database():
-    pass
+    conn = sqlite3.connect(db)
+    cursor = conn.cursor()
+    cursor.execute("PRAGMA foreign_keys = ON;")
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS categories (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL UNIQUE
+        )
+    ''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS items (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            category_id INTEGER NOT NULL,
+            image_name TEXT NOT NULL,
+            FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE
+        )
+    ''')
+    conn.commit()
+    conn.close()
+
+def get_category_id(db_conn: sqlite3.Connection, category_name: str) -> int:
+    cursor = db_conn.cursor()
+    
+    # 既存のカテゴリがあるか確認
+    cursor.execute("SELECT id FROM categories WHERE name = ?", (category_name,))
+    category = cursor.fetchone()
+
+    if category:
+        return category["id"]
+
+    # 新しいカテゴリを追加
+    cursor.execute("INSERT INTO categories (name) VALUES (?)", (category_name,))
+    db_conn.commit()
+    
+    return cursor.lastrowid
 
 
 @asynccontextmanager
@@ -92,24 +127,31 @@ async def add_item(
     with open(image_path, "wb") as f:
         f.write(image_data)
 
-    insert_item(Item(name=name, category=category, image_name=image_name))
+    category_id = get_category_id(db, category)
+
+
+    insert_item(Item(name=name, category_id=category_id, image_name=image_name),db)
     return AddItemResponse(**{"message": f"item received: {name}"})
 
+@app.get("/items")
+def get_items(db: sqlite3.Connection = Depends(get_db)):
+    cursor = db.cursor()
+    cursor.execute('''
+        SELECT items.id, items.name, categories.name AS category, items.image_name 
+        FROM items
+        JOIN categories ON items.category_id = categories.id
+    ''')
+    items = cursor.fetchall()
+    return {"items": [dict(item) for item in items]}
 
 @app.get("/items/{item_id}")
-def get_items(item_id: int):
-    items_file = pathlib.Path(__file__).parent.resolve() / "items.json"
-    
-    if items_file.exists():
-        with open(items_file, "r") as f:
-            data = json.load(f)
-    else:
-        data = {"items": []}
-    
-    if item_id < 0 or item_id >= len(data["items"]):
+def get_item(item_id: int, db: sqlite3.Connection = Depends(get_db)):
+    cursor = db.cursor()
+    cursor.execute('SELECT name, category, image_name FROM items WHERE id = ?', (item_id,))
+    item = cursor.fetchone()
+    if item is None:
         raise HTTPException(status_code=404, detail="Item not found")
-    
-    return data["items"][item_id]
+    return dict(item)
 
 
 
@@ -128,29 +170,24 @@ async def get_image(image_name):
 
     return FileResponse(image)
 
+@app.get("/search")
+def search_items(keyword: str, db: sqlite3.Connection = Depends(get_db)):
+    cursor = db.cursor()
+    query = "SELECT name, category, image_name FROM items WHERE name LIKE ?"
+    cursor.execute(query, (f"%{keyword}%",))
+    items = cursor.fetchall()
+    return {"items": [dict(item) for item in items]}
 
 class Item(BaseModel):
     name: str
-    category: str
+    category_id: int
     image_name: str = None
 
 
-import json
 
-def insert_item(item: Item):
-    # STEP 4-1: add an implementation to store an item
-    items_file = pathlib.Path(__file__).parent.resolve() / "items.json"
-    
-    # Load existing items
-    if items_file.exists():
-        with open(items_file, "r") as f:
-            data = json.load(f)
-    else:
-        data = {"items": []}
-    
-    # Add new item
-    data["items"].append(item.dict())
-    
-    # Save updated items
-    with open(items_file, "w") as f:
-        json.dump(data, f, indent=4)
+def insert_item(item: Item, db_conn: sqlite3.Connection):
+    cursor = db_conn.cursor()
+    cursor.execute('''
+        INSERT INTO items (name, category_id, image_name) VALUES (?, ?, ?)
+    ''', (item.name, item.category_id, item.image_name))
+    db_conn.commit()
