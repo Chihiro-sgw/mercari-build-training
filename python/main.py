@@ -129,8 +129,8 @@ async def add_item(
 
     category_id = get_category_id(db, category)
 
-
     insert_item(Item(name=name, category_id=category_id, image_name=image_name), db)
+
     return AddItemResponse(**{"message": f"item received: {name}"})
 
 @app.get("/items")
@@ -185,21 +185,9 @@ class Item(BaseModel):
 
 
 
-def insert_item(item: Item):
-
-    # STEP 4-1: add an implementation to store an item
-    items_file = pathlib.Path(__file__).parent.resolve() / "items.json"
-    
-    # Load existing items
-    if items_file.exists():
-        with open(items_file, "r") as f:
-            data = json.load(f)
-    else:
-        data = {"items": []}
-    
-    # Add new item
-    data["items"].append(item.dict())
-    
-    # Save updated items
-    with open(items_file, "w") as f:
-        json.dump(data, f, indent=4)
+def insert_item(item: Item, db_conn: sqlite3.Connection):
+    cursor = db_conn.cursor()
+    cursor.execute('''
+        INSERT INTO items (name, category_id, image_name) VALUES (?, ?, ?)
+    ''', (item.name, item.category_id, item.image_name))
+    db_conn.commit()
