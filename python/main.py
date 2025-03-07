@@ -129,8 +129,8 @@ async def add_item(
 
     category_id = get_category_id(db, category)
 
+    insert_item(Item(name=name, category_id=category_id, image_name=image_name), db)
 
-    insert_item(Item(name=name, category_id=category_id, image_name=image_name),db)
     return AddItemResponse(**{"message": f"item received: {name}"})
 
 @app.get("/items")
