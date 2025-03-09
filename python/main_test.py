@@ -4,12 +4,13 @@ import pytest
 import sqlite3
 import os
 import pathlib
+import io
 
 # STEP 6-4: uncomment this test setup
 test_db = pathlib.Path(__file__).parent.resolve() / "db" / "test_mercari.sqlite3"
 
 def override_get_db():
-    conn = sqlite3.connect(test_db)
+    conn = sqlite3.connect(test_db, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     try:
         yield conn
@@ -21,17 +22,26 @@ app.dependency_overrides[get_db] = override_get_db
 @pytest.fixture(autouse=True)
 def db_connection():
     # Before the test is done, create a test database
-    conn = sqlite3.connect(test_db)
-    cursor = conn.cursor()
-    cursor.execute(
-        """CREATE TABLE IF NOT EXISTS items (
-		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		name VARCHAR(255),
-		category VARCHAR(255)
-	)"""
-    )
-    conn.commit()
+    conn = sqlite3.connect(test_db, check_same_thread=False)
     conn.row_factory = sqlite3.Row  # Return rows as dictionaries
+    cursor = conn.cursor()
+    cursor.execute("PRAGMA foreign_keys = ON;")
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS categories (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL UNIQUE
+        )
+    ''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS items (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            category_id INTEGER NOT NULL,
+            image_name TEXT NOT NULL,
+            FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE
+        )
+    ''')
+    conn.commit()
 
     yield conn
 
@@ -67,7 +77,8 @@ def test_hello(want_status_code, want_body):
     ],
 )
 def test_add_item_e2e(args,want_status_code,db_connection):
-    response = client.post("/items/", data=args)
+    dummy_image = ("test.jpg", io.BytesIO(b"testimage"), "image/jpeg")
+    response = client.post("/items/", data=args, files={"image": dummy_image})
     assert response.status_code == want_status_code
     
     if want_status_code >= 400:
@@ -84,3 +95,6 @@ def test_add_item_e2e(args,want_status_code,db_connection):
     db_item = cursor.fetchone()
     assert db_item is not None
     assert dict(db_item)["name"] == args["name"]
+    cursor.execute("SELECT id FROM categories WHERE name = ?", (args["category"],))
+    db_category_id = cursor.fetchone()[0]
+    assert dict(db_item)["category_id"] == db_category_id
