@@ -93,7 +93,6 @@ app.add_middleware(
 
 class HelloResponse(BaseModel):
     message: str
-    category: str = "default"  
 
 
 @app.get("/", response_model=HelloResponse)
