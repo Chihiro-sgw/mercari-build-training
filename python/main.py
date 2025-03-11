@@ -147,7 +147,12 @@ def get_items(db: sqlite3.Connection = Depends(get_db)):
 @app.get("/items/{item_id}")
 def get_item(item_id: int, db: sqlite3.Connection = Depends(get_db)):
     cursor = db.cursor()
-    cursor.execute('SELECT name, category, image_name FROM items WHERE id = ?', (item_id,))
+    cursor.execute('''
+        SELECT items.name, categories.name AS category, items.image_name 
+        FROM items
+        JOIN categories ON items.category_id = categories.id
+        WHERE items.id = ?
+    ''', (item_id,))
     item = cursor.fetchone()
     if item is None:
         raise HTTPException(status_code=404, detail="Item not found")
@@ -173,7 +178,13 @@ async def get_image(image_name):
 @app.get("/search")
 def search_items(keyword: str, db: sqlite3.Connection = Depends(get_db)):
     cursor = db.cursor()
-    query = "SELECT name, category, image_name FROM items WHERE name LIKE ?"
+    query = '''
+        SELECT items.name, categories.name AS category, items.image_name
+        FROM items
+        JOIN categories ON items.category_id = categories.id
+        WHERE items.name LIKE ?
+    '''
+
     cursor.execute(query, (f"%{keyword}%",))
     items = cursor.fetchall()
     return {"items": [dict(item) for item in items]}
