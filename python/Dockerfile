@@ -9,8 +9,7 @@ RUN apk add --no-cache sqlite
 COPY . .
 
 RUN addgroup -S mercari && adduser -S trainee -G mercari
-RUN chown -R trainee:mercari /app/db
-RUN chown -R trainee:mercari /app/images
+RUN chown -R trainee:mercari /app
 
 USER trainee
 
