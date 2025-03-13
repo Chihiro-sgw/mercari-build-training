@@ -29,7 +29,7 @@ export const ItemList = ({ reload, onLoadCompleted }: Prop) => {
   }, [reload, onLoadCompleted]);
 
   return (
-    <div className="ItemList">
+    <div className="ItemListContainer">
       {items?.map((item) => {
         const imageUrl = `http://localhost:9000/image/${item.id}.jpg`;
         return (
