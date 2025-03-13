@@ -1,4 +1,4 @@
-FROM python:3.9.6-alpine
+FROM python:3.9-alpine
 
 WORKDIR /app
 
@@ -9,6 +9,7 @@ RUN apk add --no-cache sqlite
 COPY . .
 
 RUN addgroup -S mercari && adduser -S trainee -G mercari
+RUN chown -R trainee:mercari /app
 RUN chown -R trainee:mercari /app/db
 RUN chown -R trainee:mercari /app/images
 
