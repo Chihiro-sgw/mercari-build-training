@@ -35,7 +35,7 @@ export const ItemList = ({ reload, onLoadCompleted }: Prop) => {
         return (
           <div key={item.id} className="ItemList">
             {/* TODO: Task 2: Show item images */}
-            <img src={imageUrl} alt={item.name} width="200" onError={(e) => (e.currentTarget.src = PLACEHOLDER_IMAGE)} />
+            <img src={imageUrl} alt={item.name} width="200" height="200" onError={(e) => (e.currentTarget.src = PLACEHOLDER_IMAGE)} />
             <p>
               <span>Name: {item.name}</span>
               <br />
