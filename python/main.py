@@ -121,14 +121,20 @@ async def add_item(
     image_data = await image.read()
     image_hash = hashlib.sha256(image_data).hexdigest()
     image_name = f"{image_hash}.jpg"
-    image_path = images / image_name
-
-    with open(image_path, "wb") as f:
-        f.write(image_data)
 
     category_id = get_category_id(db, category)
 
-    insert_item(Item(name=name, category_id=category_id, image_name=image_name), db)
+    cursor = db.cursor()
+    cursor.execute('''
+        INSERT INTO items (name, category_id, image_name) VALUES (?, ?, ?)
+    ''', (name, category_id, image_name))
+    item_id = cursor.lastrowid
+    db.commit()
+
+    # 画像を item_id を使用して保存
+    image_path = images / f"{item_id}.jpg"
+    with open(image_path, "wb") as f:
+        f.write(image_data)
 
     return AddItemResponse(**{"message": f"item received: {name}"})
 
@@ -194,10 +200,3 @@ class Item(BaseModel):
     image_name: str = None
 
 
-
-def insert_item(item: Item, db_conn: sqlite3.Connection):
-    cursor = db_conn.cursor()
-    cursor.execute('''
-        INSERT INTO items (name, category_id, image_name) VALUES (?, ?, ?)
-    ''', (item.name, item.category_id, item.image_name))
-    db_conn.commit()
